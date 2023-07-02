@@ -1,0 +1,11 @@
+environment: production
+
+kube-prometheus-stack:
+  grafana:
+    grafana.ini:
+      server:
+        root_url: cluster.local
+    grafana.ini:
+      server:
+        root_url: https://cluster.local
+        domain: cluster.local
