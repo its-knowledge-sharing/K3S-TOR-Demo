@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tor
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: tor
+  serviceName: tor
+  template:
+    metadata:
+      labels:
+        app: tor
+    spec:
+      serviceAccountName: tor
+      volumes:
+      - name: home
+        emptyDir: {}
+      - name: tor
+        emptyDir: {}
+      - name: controller-scripts
+        configMap:
+          name: controller-scripts-cm
+          defaultMode: 0744
+      containers:
+      - image: {{ .Values.ssh.image.name }}:{{ .Values.ssh.image.version }}
+        imagePullPolicy: Always
+        name: openssh-server
+        resources: {}
+        env:
+        - name: PUID
+          value: '1000'
+        - name: PGID
+          value: '1000'
+        - name: SUDO_ACCESS
+          value: 'false'
+        - name: PASSWORD_ACCESS
+          value: 'true'
+        - name: TZ
+          value: Asia/Bangkok
+        - name: USER_NAME
+          valueFrom:
+            secretKeyRef:
+              name: ssh-credentials
+              key: SSH_USER
+        - name: USER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ssh-credentials
+              key: SSH_PASSWORD
+        securityContext:
+          allowPrivilegeEscalation: true
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /config
+          name: home
+      - image: {{ .Values.proxy.image.name }}:{{ .Values.proxy.image.version }}
+        imagePullPolicy: Always
+        name: proxy-server
+        resources: {}
+        env:
+        - name: TOR_SERVICE
+          value: 'true'
+        - name: TOR_SERVICE_HOSTS
+          value: 'services=22:127.0.0.1:2222,8080:loki-log-grafana.loki-log.svc.cluster.local:80,8081:monitoring-production-grafana.monitoring.svc.cluster.local:80,8443:argocd-server.argocd.svc.cluster.local:443'
+        volumeMounts:
+        - mountPath: /tor
+          name: tor
+      - image: {{ .Values.controller.image.name }}:{{ .Values.controller.image.version }}
+        command:
+        - /bin/sh
+        - -c
+        args:
+        - /scripts/controller.bash
+        imagePullPolicy: Always
+        name: controller
+        resources: {}
+        env: []
+        volumeMounts:
+        - mountPath: /scripts
+          name: controller-scripts
+        - mountPath: /tor
+          name: tor
+      restartPolicy: Always
+      securityContext: {}
